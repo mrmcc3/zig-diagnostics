@@ -17,10 +17,10 @@ pub fn main() !void {
     var response = std.ArrayList(u8).init(arena.allocator());
     defer response.deinit();
 
-    var server = Server.init(response.writer());
+    var server = Server.init(response.writer(), gpa.allocator());
 
     while (true) {
-        response.shrinkRetainingCapacity(0);
+        response.clearRetainingCapacity();
 
         var json = std.json.parseFromSlice(
             std.json.Value,

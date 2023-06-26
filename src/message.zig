@@ -26,6 +26,11 @@ pub const Message = union(enum) {
     shutdown: ShutdownRequest,
     exit: void,
 
+    document_did_open: DocumentDidOpenNotification,
+    document_did_change: DocumentDidChangeNotification,
+    // document_did_save: DocumentDidSaveNotification,
+    document_did_close: void,
+
     request_invalid: RequestError,
     request_unknown: RequestError,
 
@@ -83,7 +88,8 @@ pub const Message = union(enum) {
             .string => |s| s,
             else => return error.message_invalid,
         };
-        if (obj.get("params")) |params| {
+        const params_opt = obj.get("params");
+        if (params_opt) |params| {
             switch (params) {
                 .array, .object => {},
                 else => return error.message_invalid,
@@ -91,6 +97,12 @@ pub const Message = union(enum) {
         }
         if (std.mem.eql(u8, method, "initialized")) return .{ .initialized = {} };
         if (std.mem.eql(u8, method, "exit")) return .{ .exit = {} };
+        if (std.mem.eql(u8, method, "textDocument/didOpen")) {
+            return .{ .document_did_open = try DocumentDidOpenNotification.parse(params_opt) };
+        }
+        if (std.mem.eql(u8, method, "textDocument/didChange")) {
+            return .{ .document_did_change = try DocumentDidChangeNotification.parse(params_opt) };
+        }
         return error.notification_unknown;
     }
 
@@ -199,6 +211,82 @@ const ShutdownRequest = struct {
         try json.objectField("result");
         try json.emitNull();
         try json.endObject();
+    }
+};
+
+const DocumentDidOpenNotification = struct {
+    text: []const u8,
+    uri: []const u8,
+
+    const Self = @This();
+
+    pub fn parse(params_opt: ?std.json.Value) !Self {
+        const invalid = error.notification_invalid;
+        const params_val = params_opt orelse return invalid;
+        const params = switch (params_val) {
+            .object => |o| o,
+            else => return invalid,
+        };
+        const doc_val = params.get("textDocument") orelse return invalid;
+        const doc = switch (doc_val) {
+            .object => |o| o,
+            else => return invalid,
+        };
+        const uri_val = doc.get("uri") orelse return invalid;
+        const uri = switch (uri_val) {
+            .string => |s| s,
+            else => return invalid,
+        };
+        const text_val = doc.get("text") orelse return invalid;
+        const text = switch (text_val) {
+            .string => |s| s,
+            else => return invalid,
+        };
+        return .{ .text = text, .uri = uri };
+    }
+};
+
+const DocumentDidChangeNotification = struct {
+    text: []const u8,
+    uri: []const u8,
+
+    const Self = @This();
+
+    pub fn parse(params_opt: ?std.json.Value) !Self {
+        const invalid = error.notification_invalid;
+        const params_val = params_opt orelse return invalid;
+        const params = switch (params_val) {
+            .object => |o| o,
+            else => return invalid,
+        };
+        const doc_val = params.get("textDocument") orelse return invalid;
+        const doc = switch (doc_val) {
+            .object => |o| o,
+            else => return invalid,
+        };
+        const uri_val = doc.get("uri") orelse return invalid;
+        const uri = switch (uri_val) {
+            .string => |s| s,
+            else => return invalid,
+        };
+        const content_val = params.get("contentChanges") orelse return invalid;
+        const content = switch (content_val) {
+            .array => |a| a,
+            else => return invalid,
+        };
+
+        if (content.items.len != 1) return invalid;
+        const change_val = content.items[0];
+        const change = switch (change_val) {
+            .object => |o| o,
+            else => return invalid,
+        };
+        const text_val = change.get("text") orelse return invalid;
+        const text = switch (text_val) {
+            .string => |s| s,
+            else => return invalid,
+        };
+        return .{ .text = text, .uri = uri };
     }
 };
 
