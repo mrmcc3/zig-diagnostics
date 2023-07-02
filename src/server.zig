@@ -97,6 +97,7 @@ pub fn parse_ast(self: Self, uri: []const u8, text: []const u8) !void {
         try json.endObject();
         try json.endObject();
         try json.endObject();
+        break; // only report the first error
     }
     try json.endArray();
     try json.endObject();
@@ -117,10 +118,6 @@ pub fn process_obj(self: *Self, val: std.json.Value) !void {
         return;
     };
 
-    // TODO
-    // - save open a child process to `zig fmt --stdin --ast-check --check`
-    // - parse errors from stderr and send back as diagnostics
-
     switch (message) {
         .initialize => |initialize| {
             switch (self.state) {
@@ -138,7 +135,14 @@ pub fn process_obj(self: *Self, val: std.json.Value) !void {
                 else => return,
             }
         },
-        // .document_did_save,
+        .document_did_save => |n| {
+            switch (self.state) {
+                .initialized => {
+                    _ = n; // TODO zig fmt --stdin --ast-check --check
+                },
+                else => return,
+            }
+        },
         .document_did_open => |n| {
             switch (self.state) {
                 .initialized => try self.parse_ast(n.uri, n.text),
@@ -168,6 +172,12 @@ pub fn process_obj(self: *Self, val: std.json.Value) !void {
                 else => return error.premature_exit,
             }
         },
-        else => {},
+        .request_unknown, .request_invalid => |r| {
+            switch (self.state) {
+                .initialized => try r.respond(self.writer),
+                .not_initialized, .initializing => try self.err(-32002, "server not initialized"),
+                .shutting_down => try self.err(-32803, "server is already shutting down"),
+            }
+        },
     }
 }

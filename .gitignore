@@ -1,3 +1,4 @@
 .helix/
 zig-cache/
 zig-out/
+deno/
